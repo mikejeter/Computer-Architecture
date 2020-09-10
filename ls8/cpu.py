@@ -2,74 +2,19 @@
 
 import sys
 
-"""OP CODES"""
-ADD = 0b10100000
-SUB = 0b10100001
-MUL = 0b10100010
-DIV = 0b10100011
-MOD = 0b10100100
 
-INC = 0b01100101
-DEC = 0b011001100
-
-CMP = 0b10100111
-
-
-AND = 0b10101000
-NOT = 0b01101001
-OR = 0b10101010
-XOR = 0b10101011
-SHL = 0b10101100
-SHR = 0b10101101
-
-"""PC Mutators"""
-CALL = 0b01010000
-RET = 0b00010001
-
-INT = 0b01010010
-IRET = 0b00010011
-
-JMP = 0b01010100
-JEQ = 0b01010101
-JNE = 0b01010110
-JGT = 0b01010111
-JLT = 0b01011000
-JLE = 0b01011001
-
-JGE = 0b01011010
-
-"""Other"""
-NOP = 0b00000000
-
-HLT = 0b00000001
-
-LDI = 0b10000010
-
-LD = 0b10000011
-ST = 0b10000100
-
-PUSH = 0b01000101
-POP = 0b01000110
-
-PRN = 0b01000111
-PRA = 0b01001000
 
 class CPU:
     """Main CPU class."""
 
     def __init__(self):
         """Construct a new CPU."""
-        self.reg = [0] * 8
-        self.ram = [0] * 256
+        self.reg = [0]*8
+        self.reg[7] = 0xF4
+        self.ram = [0]*256
         self.pc = 0
-        self.fl = 0
-        self.running = True
 
-    def ram_read(self, MAR):
-        return self.ram[MAR]
-
-    def ram_write(self, MDR, MAR):
-        self.ram[MAR] = MDR
+    
 
     def load(self):
         """Load a program into memory."""
@@ -78,20 +23,42 @@ class CPU:
 
         # For now, we've just hardcoded a program:
 
-        program = [
+        
+
+        #program = [
             # From print8.ls8
-            0b10000010, # LDI R0,8
-            0b00000000,
-            0b00001000,
-            0b01000111, # PRN R0
-            0b00000000,
-            0b00000001, # HLT
-        ]
+        #    0b10000010, # LDI R0,8
+        #    0b00000000,
+        #    0b00001000,
+        #    0b01000111, # PRN R0
+        #    0b00000000,
+        #    0b00000001, # HLT
+        #]
 
-        for instruction in program:
-            self.ram[address] = instruction
-            address += 1
+        #for instruction in program:
+        #    self.ram[address] = instruction
+        #    address += 1
 
+        if len(sys.argv) < 2:
+            print('please pass in a second filename')
+            sys.exit()
+        try:
+            address = 0
+            with open(sys.argv[1]) as files:
+                for line in files:
+                    split_line = line.split('#')
+                    command = split_line[0].strip()
+                    if command == '':
+                        continue
+                    num_command = int(command, 2)
+
+                    self.ram[address] = num_command
+                    address += 1
+        except FileNotFoundError:
+            print(f'{sys.argv[0]}{sys.argv[1]}file was not found')
+            sys.exit()
+
+        
 
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
@@ -101,6 +68,12 @@ class CPU:
         #elif op == "SUB": etc
         else:
             raise Exception("Unsupported ALU operation")
+
+    def ram_read(self, address):
+        return self.ram[address]
+
+    def ram_write(self, address, value):
+        self.reg[address] = value
 
     def trace(self):
         """
@@ -122,23 +95,52 @@ class CPU:
 
         print()
 
+    
+
     def run(self):
         """Run the CPU."""
 
-        while self.running:
+        self.load()
+        while self.pc < len(self.ram):
+            command = self.ram[self.pc]
+            HLT = 0b00000001
+            operand1 = self.ram_read(self.pc+1)
+            operand2 = self.ram_read(self.pc+2)
 
-            IR = self.ram_read(self.pc)
+            if command == HLT:  # stops program
+                break
 
-            operand_a = self.ram_read(self.pc + 1)
-            operand_b = self.ram_read(self.pc + 2)
+            if command == 0b10000010:  # LDI/Save
+                # registers the next line as the index inserting the line after that one as the value
+                self.ram_write(operand1, operand2)
 
-            if IR == HLT:
-                self.running = False
+            if command == 0b01000111:  # prints next line
+                print(self.reg[operand1])
 
-            elif IR == LDI:
-                self.reg[operand_a] = operand_b
-                self.pc += 3
+            if command == 0b10100010:  # multiplies the numbers of the indexes of the next 2 lines
+                self.reg[operand1] *= self.reg[operand2]
 
-            elif IR == PRN:
-                print(self.reg[operand_a])
-                self.pc += 2
+            if command == 0b01000101:  # Push
+                self.reg[7] -= 1  # decrement stack pointer
+                self.reg[7] &= 0xff
+
+                # get the index
+                reg_index = self.ram[self.pc+1]
+                # get the value at the pointer's address
+                value = self.reg[reg_index]
+                self.ram[self.reg[7]] = value
+
+            if command == 0b01000110:  # Pop
+                # get the stack pointer
+                sp = self.reg[7]
+                # get register number to put value in
+                reg = self.ram[self.pc+1]
+                # use stack pointer to get the value
+                value = self.ram[sp]
+                # put the value into the given register
+                self.reg[reg] = value
+
+                self.reg[7] += 1
+
+            self.pc += command >> 6
+            self.pc += 1
