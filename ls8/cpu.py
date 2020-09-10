@@ -2,12 +2,19 @@
 
 import sys
 
+
+
 class CPU:
     """Main CPU class."""
 
     def __init__(self):
         """Construct a new CPU."""
-        pass
+        self.reg = [0]*8
+        self.reg[7] = 0xF4
+        self.ram = [0]*256
+        self.pc = 0
+
+    
 
     def load(self):
         """Load a program into memory."""
@@ -16,20 +23,42 @@ class CPU:
 
         # For now, we've just hardcoded a program:
 
-        program = [
+        
+
+        #program = [
             # From print8.ls8
-            0b10000010, # LDI R0,8
-            0b00000000,
-            0b00001000,
-            0b01000111, # PRN R0
-            0b00000000,
-            0b00000001, # HLT
-        ]
+        #    0b10000010, # LDI R0,8
+        #    0b00000000,
+        #    0b00001000,
+        #    0b01000111, # PRN R0
+        #    0b00000000,
+        #    0b00000001, # HLT
+        #]
 
-        for instruction in program:
-            self.ram[address] = instruction
-            address += 1
+        #for instruction in program:
+        #    self.ram[address] = instruction
+        #    address += 1
 
+        if len(sys.argv) < 2:
+            print('please pass in a second filename')
+            sys.exit()
+        try:
+            address = 0
+            with open(sys.argv[1]) as files:
+                for line in files:
+                    split_line = line.split('#')
+                    command = split_line[0].strip()
+                    if command == '':
+                        continue
+                    num_command = int(command, 2)
+
+                    self.ram[address] = num_command
+                    address += 1
+        except FileNotFoundError:
+            print(f'{sys.argv[0]}{sys.argv[1]}file was not found')
+            sys.exit()
+
+        
 
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
@@ -39,6 +68,12 @@ class CPU:
         #elif op == "SUB": etc
         else:
             raise Exception("Unsupported ALU operation")
+
+    def ram_read(self, address):
+        return self.ram[address]
+
+    def ram_write(self, address, value):
+        self.reg[address] = value
 
     def trace(self):
         """
@@ -60,6 +95,50 @@ class CPU:
 
         print()
 
+    
+
     def run(self):
         """Run the CPU."""
-        pass
+
+        self.load()
+        while self.pc < len(self.ram):
+            command = self.ram[self.pc]
+            HLT = 0b00000001
+            operand1 = self.ram_read(self.pc+1)
+            operand2 = self.ram_read(self.pc+2)
+
+            if command == HLT:  
+                break
+
+            if command == 0b10000010:  # LDI/Save
+                
+                self.ram_write(operand1, operand2)
+
+            if command == 0b01000111:  # prints next line
+                print(self.reg[operand1])
+
+            if command == 0b10100010:  
+                self.reg[operand1] *= self.reg[operand2]
+
+            if command == 0b01000101:  # Push
+                self.reg[7] -= 1  
+                self.reg[7] &= 0xff
+
+                
+                reg_index = self.ram[self.pc+1]
+                
+                value = self.reg[reg_index]
+                self.ram[self.reg[7]] = value
+
+            if command == 0b01000110:  # Pop
+                
+                sp = self.reg[7]
+                
+                reg = self.ram[self.pc+1]
+                value = self.ram[sp]
+                self.reg[reg] = value
+
+                self.reg[7] += 1
+
+            self.pc += command >> 6
+            self.pc += 1
